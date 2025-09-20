@@ -2,8 +2,8 @@ import { Server, Socket } from "socket.io";
 import Player from "../../types/player";
 import Room from "../../types/room";
 import { generateRandomInventory } from "../utils";
+import { PLAYERS_PER_ROOM } from "../constants/game";
 
-const PLAYERS_PER_ROOM = 2;
 
 const rooms: Record<string, Room> = {};
 
@@ -87,6 +87,11 @@ export default function registerGameHandlers(io: Server, socket: Socket) {
     );
     const player = room?.players.find((p) => p.socketId === socket.id);
 
+    if (room?.players.length !== PLAYERS_PER_ROOM) {
+        callback(false, "The game has not started yet.");
+        return;
+    }
+
     if (room) {
       if (!message || message.trim().length === 0) {
         callback(false, "Message cannot be empty.");
@@ -114,4 +119,139 @@ export default function registerGameHandlers(io: Server, socket: Socket) {
 
     callback(false, "You are not in a room.");
   });
+
+  socket.on("submitOffer", ({ offeredItemIds, receivedItemIds }: { offeredItemIds: string[]; receivedItemIds: string[] }, callback) => {
+    console.log(`Received offer from ${socket.id}`);
+
+    // Find the room of the sender
+    const room = Object.values(rooms).find((r) =>
+      r.players.some((p) => p.socketId === socket.id)
+    );
+    const player = room?.players.find((p) => p.socketId === socket.id);
+
+    if (room?.players.length !== PLAYERS_PER_ROOM) {
+        callback(false, "The game has not started yet.");
+        return;
+    }
+    
+    if (!room || !player) {
+      callback(false, "You are not in a room.");
+      return;
+    }
+
+    if (room.offer) {
+        callback(false, "There is already an active offer in the room.");
+        return;
+    }
+
+    const otherPlayer = room.players.find(p => p.id !== player.id);
+
+    if (!otherPlayer) {
+      callback(false, "No other player found in the room.");
+      return;
+    }
+
+    // Validate offered items
+    const playerHasAllOfferedItems = offeredItemIds.every(id => 
+      player.inventory.some(item => item.id === id)
+    );
+    
+    if (!playerHasAllOfferedItems) {
+      callback(false, "You do not have all the items you are offering.");
+      return;
+    }
+
+    // Validate received items
+    const otherPlayerHasAllRequestedItems = receivedItemIds.every(id =>
+        otherPlayer.inventory.some(item => item.id === id)
+    );
+
+    if (!otherPlayerHasAllRequestedItems) {
+      callback(false, "The other player does not have all the items you are requesting.");
+      return;
+    }
+
+    // Store the offer in the room
+    room.offer = {
+        playerId: player.id,
+        offeredItemIds,
+        receivedItemIds
+    }
+
+    // Notify the other player about the new offer
+    io.to(room.id).emit("newOffer", { playerId: player.id, offeredItemIds, receivedItemIds });
+
+    callback(true);
+  })
+
+  socket.on("cancelOffer", (callback) => {
+    console.log(`Offer cancelled by ${socket.id}`);
+
+    // Find the room of the sender
+    const room = Object.values(rooms).find((r) =>
+      r.players.some((p) => p.socketId === socket.id)
+    );
+    const player = room?.players.find((p) => p.socketId === socket.id);
+
+    if (room?.players.length !== PLAYERS_PER_ROOM) {
+        callback(false, "The game has not started yet.");
+        return;
+    }
+
+    if (!room || !player) {
+      callback(false, "You are not in a room.");
+      return;
+    }
+
+    if (!room.offer || room.offer.playerId !== player.id) {
+        callback(false, "You have no active offer to cancel.");
+        return;
+    }
+
+    // Remove the offer from the room
+    room.offer = null;
+
+    // Notify the other player about the offer cancellation
+    io.to(room.id).emit("offerCancelled");
+
+    callback(true);
+  })
+
+  socket.on("answerOffer", ({ accept }: { accept: boolean }, callback) => {
+    console.log(`Offer answered by ${socket.id}: ${accept}`);
+
+    // Find the room of the sender
+    const room = Object.values(rooms).find((r) =>
+      r.players.some((p) => p.socketId === socket.id)
+    );
+    const player = room?.players.find((p) => p.socketId === socket.id);
+
+    if (room?.players.length !== PLAYERS_PER_ROOM) {
+        callback(false, "The game has not started yet.");
+        return;
+    }
+
+    if (!room || !player) {
+        callback(false, "You are not in a room.");
+        return;
+    }
+
+    if (!room.offer || room.offer.playerId === player.id) {
+        callback(false, "There is no active offer to respond to.");
+        return;
+    }
+
+    // Process the offer response
+    if (accept) {
+        // If accepted, finalize the trade
+        finalizeTrade(room.offer);
+        room.offer = null;
+        io.to(room.id).emit("offerAccepted");
+    } else {
+        room.offer = null;
+        io.to(room.id).emit("offerCancelled");
+    }
+
+    callback(true); 
+  })
 }

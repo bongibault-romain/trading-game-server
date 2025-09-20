@@ -1,0 +1,3 @@
+export const PLAYERS_PER_ROOM = 2;
+export const MINIMUM_INVENTORY_ITEMS = 5;
+export const MAXIMUM_INVENTORY_ITEMS = 15;
