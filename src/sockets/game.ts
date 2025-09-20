@@ -77,4 +77,41 @@ export default function registerGameHandlers(io: Server, socket: Socket) {
       }
     });
   });
+
+  socket.on("chatMessage", ({ message }: { message: string }, callback) => {
+    console.log(`Received message from ${socket.id}: ${message}`);
+
+    // Find the room of the sender
+    const room = Object.values(rooms).find((r) =>
+      r.players.some((p) => p.socketId === socket.id)
+    );
+    const player = room?.players.find((p) => p.socketId === socket.id);
+
+    if (room) {
+      if (!message || message.trim().length === 0) {
+        callback(false, "Message cannot be empty.");
+        return;
+      }
+
+      if (message.length > 500) {
+        callback(
+          false,
+          "Message is too long. Maximum length is 500 characters."
+        );
+        return;
+      }
+
+      // Broadcast the chat message to all players in the room
+      io.to(room.id).emit("chatMessage", {
+        playerId: player?.id,
+        content: message,
+        timestamp: Date.now(),
+      });
+
+      callback(true);
+      return;
+    }
+
+    callback(false, "You are not in a room.");
+  });
 }
