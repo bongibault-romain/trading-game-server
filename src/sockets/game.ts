@@ -53,7 +53,7 @@ export default function registerGameHandlers(io: Server, socket: Socket) {
     if (!roomId) {
       // Create a new room
       roomId = crypto.randomUUID();
-      rooms[roomId] = { id: roomId, players: [] };
+      rooms[roomId] = { id: roomId, players: [], offer: null };
     }
 
     const player: Player = {
@@ -179,7 +179,7 @@ export default function registerGameHandlers(io: Server, socket: Socket) {
     }
 
     // Notify the other player about the new offer
-    io.to(room.id).emit("newOffer", { playerId: player.id, offeredItemIds, receivedItemIds });
+    io.to(room.id).emit("newOffer", { offer: { playerId: player.id, offeredItemIds, receivedItemIds } });
 
     callback(true);
   })
@@ -244,9 +244,46 @@ export default function registerGameHandlers(io: Server, socket: Socket) {
     // Process the offer response
     if (accept) {
         // If accepted, finalize the trade
-        finalizeTrade(room.offer);
+        const offeringPlayer = room.players.find(p => p.id === room.offer?.playerId);
+        const receivingPlayer = player;
+
+        if (!offeringPlayer || !receivingPlayer) {
+            callback(false, "Players involved in the offer not found.");
+            return;
+        }
+
+        // Validate that both players still have the items
+        const offeringPlayerHasAllOfferedItems = room.offer.offeredItemIds.every(id => 
+            offeringPlayer.inventory.some(item => item.id === id)
+        );
+        const receivingPlayerHasAllRequestedItems = room.offer.receivedItemIds.every(id =>
+            receivingPlayer.inventory.some(item => item.id === id)
+        );
+
+        if (!offeringPlayerHasAllOfferedItems || !receivingPlayerHasAllRequestedItems) {
+            room.offer = null;
+            io.to(room.id).emit("offerCancelled");
+            callback(false, "One of the players no longer has the required items. Offer cancelled.");
+            return;
+        }
+
+        // Transfer offered items from offeringPlayer to receivingPlayer
+        const offeredItems = offeringPlayer.inventory.filter(item => room.offer?.offeredItemIds.includes(item.id));
+        offeringPlayer.inventory = offeringPlayer.inventory.filter(item => !room.offer?.offeredItemIds.includes(item.id));
+        receivingPlayer.inventory.push(...offeredItems);
+
+        // Transfer requested items from receivingPlayer to offeringPlayer
+        const requestedItems = receivingPlayer.inventory.filter(item => room.offer?.receivedItemIds.includes(item.id));
+        receivingPlayer.inventory = receivingPlayer.inventory.filter(item => !room.offer?.receivedItemIds.includes(item.id));
+        offeringPlayer.inventory.push(...requestedItems);
+
+        io.to(room.id).emit("offerAccepted", {
+            offeringPlayerId: offeringPlayer.id,
+            receivingPlayerId: receivingPlayer.id,
+            offeredInventory: offeringPlayer.inventory,
+            receivedInventory: receivingPlayer.inventory
+        });
         room.offer = null;
-        io.to(room.id).emit("offerAccepted");
     } else {
         room.offer = null;
         io.to(room.id).emit("offerCancelled");
