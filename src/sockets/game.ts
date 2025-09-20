@@ -7,7 +7,7 @@ const PLAYERS_PER_ROOM = 2;
 const rooms: Record<string, Room> = {};
 
 export default function registerGameHandlers(io: Server, socket: Socket) {
-  socket.on("joinGame", (nickname: string) => {
+  socket.on("joinGame", ({ nickname }: { nickname: string }) => {
     console.log(
       `Player ${nickname} joined the game with socket ID: ${socket.id}`
     );
@@ -27,7 +27,6 @@ export default function registerGameHandlers(io: Server, socket: Socket) {
     const player: Player = {
       id: crypto.randomUUID(),
       nickname,
-      socket,
       inventory: [],
     };
 
@@ -35,13 +34,13 @@ export default function registerGameHandlers(io: Server, socket: Socket) {
 
     socket.join(roomId);
     socket.emit("joinedRoom", { roomId, player });
-
-    console.log(`Player ${nickname} added to room ${roomId}`);
-
+    
+    console.log(`Player ${nickname} joined room ${roomId}`);
+    
     if (rooms[roomId].players.length === PLAYERS_PER_ROOM) {
       // Notify players that the game is starting
       io.to(roomId).emit("gameStarting", {
-        players: rooms[roomId].players
+        players: rooms[roomId].players,
       });
     }
   });
