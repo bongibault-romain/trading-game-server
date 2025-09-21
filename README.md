@@ -24,6 +24,12 @@ Installer les dépendences
   npm install
 ```
 
+Créer un fichier `.env` pour les variables d'environement, vous pouvez copier directer le fichier `.env.example`
+
+```
+PORT=3333
+```
+
 Démarrer le serveur en mode dévelopment
 
 ```bash
