@@ -14,8 +14,7 @@ const io = new Server(server, {
   cors: {
     origin: '*',
     methods: [],
-  },
-  path: '/'
+  }
 });
 
 app.get("/", (req, res) => {
