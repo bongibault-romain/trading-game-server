@@ -1,5 +1,6 @@
 import { MAXIMUM_INVENTORY_ITEMS, MINIMUM_INVENTORY_ITEMS } from "./constants/game";
 import { ITEMS } from "./constants/items";
+import crypto from "crypto";
 
 export function generateRandomInventory(): { id: string; name: string }[] {
   const items = [];
