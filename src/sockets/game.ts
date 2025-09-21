@@ -3,7 +3,7 @@ import Player from "../../types/player";
 import Room from "../../types/room";
 import { generateRandomInventory } from "../utils";
 import { PLAYERS_PER_ROOM } from "../constants/game";
-
+import crypto from "crypto";
 
 const rooms: Record<string, Room> = {};
 
